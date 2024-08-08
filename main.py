@@ -10,29 +10,37 @@ death=True #collision of planets
 mass_dim=3 #planet size-to-mass proportion in dimensions
 particle_count=250 #max count of planets
 G=500000 #Greater this value, weaker overall gravity, can be used as density
-drag=0
-grid=100
-grid_color=[10,10,15]
+drag=0 #space drag...
+GRID=100 #size in pixels of background grid side
+grid_color=[20,20,30] #rgb color of the grid
+HEIGHT=540 #Window Height and Width
+WIDTH=960
+SIZE=1 #game size proportional to window
+RESIZE_CONTENT=True
 
-#IT LOOKS LIKE CONFIG BUT IT'S NOT
-#EDIT AT YOUR OWN RISK
-HEIGHT=1080
-WIDTH=1920
 
 #Technical variables
 dead=[]
 new_world=[]
-disp=pg.display.set_mode((WIDTH, HEIGHT))
+disp=pg.display.set_mode((WIDTH, HEIGHT),pg.RESIZABLE)
 clock=pg.time.Clock()
-lastid=0
-v_grids=int(WIDTH/grid+1)
-h_grids=int(HEIGHT/grid+1)
-total_mass=0
-camera=1
+lastid,camera,total_mass=0,0,0
+def resize():
+  h_prop=HEIGHT/1080
+  w_prop=WIDTH/1920
+  if RESIZE_CONTENT:prop=min(h_prop,w_prop)
+  else:prop=1
+  prop*=SIZE
+  grid=prop*GRID
+  v_grids=int(WIDTH/grid+2)
+  h_grids=int(HEIGHT/grid+2)
+  win_rad=int(math.hypot(HEIGHT,WIDTH)/2/SIZE)
+  globals().update(locals())
+
+resize()
 
 
-
-class Planet():#I was forced to...
+class Planet:   #I was forced to...
   def __init__(self,mass,pos,vel):
     self.setmass(mass)
     self.x,self.y=pos
@@ -43,16 +51,18 @@ class Planet():#I was forced to...
     self.r=s256(lastid)
     self.g=s256(lastid+1)
     self.b=s256(lastid+2)
+
   def set(self,mass,pos,vel):
     self.setmass(mass)
     self.x,self.y=pos
     self.dx,self.dy=vel
+
   def setmass(self,mass):
     self.mass=mass
     self.size=mass**(1/mass_dim)
 
 def proc(base_n):
-  global camera
+  global total_mass,camera
   base=world[base_n]
   for obj_n in range(len(world)):
     if obj_n!=base_n:
@@ -63,9 +73,8 @@ def proc(base_n):
         for task in ["x","y","dx","dy","r","g","b"]: #combining properties when colliding
           exec("base.{0}=(base.{0}*base.mass+obj.{0}*obj.mass)/(base.mass+obj.mass)".format(task))
         base.setmass(base.mass+obj.mass)
-        if camera==obj.id:camera=base.id
-        if camera==base.id:camera_n=base_n
-      elif obj_n==len(world)-1 and dist>10000:
+        if camera.id==obj.id:camera=base
+      elif obj_n==len(world)-1 and dist>win_rad*10:
         dead.append(obj_n)
         total_mass-=obj.mass
       base.dx+=(obj.x-base.x)*obj.mass/G/dist #zakon
@@ -75,12 +84,17 @@ def proc(base_n):
   base.x+=base.dx
   base.y+=base.dy
   new_world[base_n]=base
-  pg.draw.circle(disp,[base.r,base.g,base.b], [(base.x-world[-1].x+WIDTH/2),(base.y-world[-1].y+HEIGHT/2)],base.size)
+  pg.draw.circle(disp,[base.r,base.g,base.b],[
+  (base.x-camera.x)*prop+WIDTH/2,
+  (base.y-camera.y)*prop+HEIGHT/2],
+  math.ceil(base.size*prop))
 
 def add(mass,pos,vel):
   global total_mass
   total_mass+=mass
-  new_world.insert(0,Planet(mass,pos,vel))#less letters
+  planet=Planet(mass,pos,vel)
+  new_world.insert(0,planet)
+  return planet
 
 def vec(r,l,x=0,y=0):return ([(math.sin(r)*l)+x,(math.cos(r)*l)+y]) #angle+radius->x+y
 
@@ -89,8 +103,8 @@ def create_particles(count,radius,mass,max_vel):
     seed(None)
     a=randint(0,360)
     add(randint(mass[0],mass[1]),
-      vec(a,randint(100,radius),world[-1].x,world[-1].y),
-      vec(a+math.pi/2,randint(0,max_vel)))
+      vec(a,randint(radius[0],radius[1]),camera.x,camera.y),
+      vec(a+math.pi/1,randint(0,max_vel)))
 
 def s256(sid):#8 bit seeded random
   seed(sid)
@@ -98,9 +112,9 @@ def s256(sid):#8 bit seeded random
 
 def draw_grid():
   for i in range(v_grids):
-    pg.draw.line(disp,grid_color,[i*grid-world[-1].x%grid,0],[i*grid-world[-1].x%grid,HEIGHT])
+    pg.draw.line(disp,grid_color,[i*grid-camera.x%grid,0],[i*grid-camera.x%grid,HEIGHT])
   for i in range(h_grids):
-    pg.draw.line(disp,grid_color,[0,i*grid-world[-1].y%grid],[WIDTH,i*grid-world[-1].y%grid])
+    pg.draw.line(disp,grid_color,[0,i*grid-camera.y%grid],[WIDTH,i*grid-camera.y%grid])
 
 
 #default planets
@@ -110,7 +124,7 @@ def draw_grid():
 #add(1000,[500,750],[0,10])
 #add(1000,[250,500],[0,-5])
 #add(1000,[505,750],[0,0])
-add(201,[750,500],[0,0])
+camera=add(201,[750,500],[0,0])
 while 1:
   world=new_world.copy()
   disp.fill([0, 0, 0])
@@ -130,10 +144,13 @@ while 1:
       except:pass
     dead=[]
   pg.display.update()
-  create_particles(particle_count-len(new_world),5000, [50, 200], 10)
+  create_particles(particle_count-len(new_world),[win_rad,win_rad*5], [50, 200], 10)
   #new_world[0].set(50000,[750,500],[0,0])
   clock.tick(30)
   for event in pg.event.get():
     if event.type == pg.QUIT:
       pg.quit()
       quit(1488)
+    if event.type==pg.VIDEORESIZE:
+      WIDTH,HEIGHT=event.w, event.h
+      resize()
